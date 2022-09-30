@@ -1,5 +1,5 @@
 from xmlrpc.client import ServerProxy, Fault
-from os.path import join, isfile, abspath
+from os.path import join, isfile, abspath, listdir
 from xmlrpc.server import SimpleXMLRPCServer
 from urllib.parse import urlparse
 import sys
@@ -108,6 +108,9 @@ class ImprovedNode:
         f.write(data)
         f.close()
         return OK
+
+    def get_list(self):
+        return listdir(self.dirname)
 
     def _start(self):
         s = SimpleXMLRPCServer(("", get_port(self.url)), logRequests=False)
