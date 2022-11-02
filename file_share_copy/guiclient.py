@@ -2,8 +2,8 @@
 Author: hanshan-macbookair 2625406970@qq.com
 Date: 2022-10-01 16:55:26
 LastEditors: hanshan-macbookair 2625406970@qq.com
-LastEditTime: 2022-11-02 23:02:14
-FilePath: /Python-Learn/file_share/guiclient.py
+LastEditTime: 2022-11-03 01:32:01
+FilePath: /Python-Learn/file_share_copy/guiclient.py
 Description: GUI版本的客户端
 
 Copyright (c) 2022 by hanshan-macbookair 2625406970@qq.com, All Rights Reserved.
@@ -44,6 +44,7 @@ class GuiClient:
         self.root_path = dir
         self.current_path = dir
         self.url = url
+
         n = NodeServer(url, dir)
         t = Thread(target=n._start, args=(q,))
         notify_thread = Thread(target=self.recv_notify)
@@ -52,22 +53,24 @@ class GuiClient:
         t.setDaemon(True)
         t.start()
         sleep(0.1)
-        self.local_server = ServerProxy(url)
-        self.local_server.ping()
+        self.server = ServerProxy(url)
+        self.server.ping()
         print("本地节点:"+self.url+"已启动")
 
     def recv_notify(self):
         while True:
-            q.get(block=True)
-            self.server_log.insert(END, "文件发生变动")
-            self.display_dir()
+            mode = q.get(block=True)
+            if mode == -1:
+                self.server_log.insert(END, "文件发生变动")
+                self.display_dir()
+            else:
+                self.server_status.set("主服务器@"+str(mode)+"从机")
 
     def statuc_check(func):    # func接收body
         def ware(self, *args, **kwargs):    # self,接收body里的self,也就是类实例
             # print('This is a decrator!')
             if self.server:        # 判断类属性
                 return func(self, *args, **kwargs)
-            else:
                 self.server_log.insert(END, "未连接到服务器，无效操作")
                 return
         return ware
@@ -77,16 +80,16 @@ class GuiClient:
         self.window.title("文件共享")
         self.window.geometry("900x600")
 
-        lbl_ip = tkinter.Label(self.window, text="中心服务器IP地址")
+        lbl_ip = tkinter.Label(self.window, text="主服务器IP地址")
         self.ent_ip = tkinter.Entry(
             self.window, textvariable=tkinter.StringVar(value=DefaultIP))
-        lbl_port = tkinter.Label(self.window, text="中心服务器端口号")
+        lbl_port = tkinter.Label(self.window, text="主服务器端口号")
         self.ent_port = tkinter.Entry(
             self.window, textvariable=tkinter.StringVar(value=DefaultPort))
         lbl_server = tkinter.Label(self.window, text="服务器状态")
 
         self.server_status = tkinter.StringVar()
-        self.server_status.set("已断开服务器连接")
+        self.server_status.set("主服务器@0从机")
         lbl_server_status = tkinter.Label(
             self.window, textvariable=self.server_status)
 
@@ -103,9 +106,9 @@ class GuiClient:
         btn_upfile = tkinter.Button(
             self.window, text="上传文件", width=15, command=self.upload_file)
         btn_connect = tkinter.Button(
-            self.window, text="连接服务器", width=15, command=self.connect_server)
+            self.window, text="加入集群", width=15, command=self.connect_server)
         btn_disconnect = tkinter.Button(
-            self.window, text="断开连接", width=15, command=self.close_connection)
+            self.window, text="离开集群", width=15, command=self.close_connection)
 
         self.server_log = tkinter.Listbox(self.window, width=38, height=23)
         self.file_list = tkinter.Listbox(
@@ -147,11 +150,12 @@ class GuiClient:
 
     def _start(self):
         self.init_gui()
+        self.display_dir()
         self.window.mainloop()
 
     def display_dir(self):
         try:
-            dirlist = self.local_server.get_list(self.current_path)
+            dirlist = self.server.get_list(self.current_path)
             # dirlist = []
         except:
             return FAIL
@@ -182,13 +186,10 @@ class GuiClient:
             return
         url = "http://"+ip+":"+port
         try:
-            self.server = ServerProxy(url)
-            self.node = self.server.node_get_msg(self.url)
-            print(self.node)
-            ret = self.local_server.hello(self.node.copy())
+            ret = self.server.add_cluster(url)
             # print(ret)
             self.server_log.insert(END, "连接成功!\n")
-            self.server_status.set("已连接到"+url)
+            self.server_status.set("从节点@"+url)
             ret = self.display_dir()
             if ret == OK:
                 self.server_log.insert(END, "文件列表拉取成功!\n")
@@ -198,7 +199,6 @@ class GuiClient:
         except:
             self.server_log.insert(END, "连接失败")
 
-    @statuc_check
     def change_directory(self):
         if self.selected_name.get() == DefaultName or not self.selected_name.get():
             self.server_log.insert(END, "未选择文件（文件夹)")
@@ -213,7 +213,7 @@ class GuiClient:
                 return
         try:
             # print(self.selected_name.get())
-            ret = self.local_server.change_dir(
+            ret = self.server.change_dir(
                 self.current_path, self.selected_name.get())
             # print(ret)
             if ret == OK:
@@ -229,7 +229,6 @@ class GuiClient:
             self.server_log.insert(END, "服务器错误，无法拉取文件列表，断开连接\n")
             self.close_connection()
 
-    @statuc_check
     def create_directory(self):
         input_name = askstring(
             "创建文件夹", "请输入要创建的文件夹名称")
@@ -239,7 +238,7 @@ class GuiClient:
             return
 
         try:
-            ret = self.local_server.create_dir(
+            ret = self.server.create_dir(
                 self.current_path, input_name)
             if ret == OK:
                 self.server_log.insert(
@@ -251,14 +250,13 @@ class GuiClient:
             self.server_log.insert(END, "服务器错误，无法拉取文件列表，断开连接\n")
             self.close_connection()
 
-    @statuc_check
     def delete_directory(self):
         if self.selected_name.get() == DefaultName or not self.selected_name.get() or self.selected_name.get() == "(回到上一级目录)":
             self.server_log.insert(END, "未选择文件夹")
             return
         try:
             # print(self.selected_name.get())
-            ret = self.local_server.delete_dir(
+            ret = self.server.delete_dir(
                 self.current_path, self.selected_name.get())
             # print(ret)
             if ret == OK:
@@ -271,14 +269,13 @@ class GuiClient:
             self.server_log.insert(END, "服务器错误，无法拉取文件列表，断开连接\n")
             self.close_connection()
 
-    @statuc_check
     def delete_file(self):
         if self.selected_name.get() == DefaultName or not self.selected_name.get() or self.selected_name.get() == "(回到上一级目录)":
             self.server_log.insert(END, "未选择文件")
             return
         try:
             # print(self.selected_name.get())
-            ret = self.local_server.delete_file(
+            ret = self.server.delete_file(
                 self.current_path, self.selected_name.get())
             # print(ret)
             if ret == OK:
@@ -291,13 +288,12 @@ class GuiClient:
             self.server_log.insert(END, "服务器错误，无法拉取文件列表，断开连接\n")
             self.close_connection()
 
-    @statuc_check
     def download_file(self):
         if self.selected_name.get() == DefaultName or not self.selected_name.get() or self.selected_name.get() == "(回到上一级目录)":
             self.server_log.insert(END, "未选择文件")
             return
         try:
-            ret, data = self.local_server.fetch(
+            ret, data = self.server.fetch(
                 self.current_path, self.selected_name.get())
             filename = self.selected_name.get()
             if filename[:len(RemoteFileBefore)] == RemoteFileBefore:
@@ -316,7 +312,6 @@ class GuiClient:
             self.server_log.insert(END, "服务器错误，断开连接\n")
             self.close_connection()
 
-    @statuc_check
     def upload_file(self):
         filename = askopenfilename()
         try:
@@ -325,7 +320,7 @@ class GuiClient:
             self.server_log.insert(END, "读取文件失败")
             return
         try:
-            ret, msg = self.local_server.upload(
+            ret, msg = self.server.upload(
                 self.current_path, os.path.basename(filename), data)
             # print(ret)
             if ret == OK:
@@ -343,9 +338,8 @@ class GuiClient:
                 self.server.node_leave(self.url)
             except:
                 pass
-            self.server = None
-        self.server_log.insert(END, "已断开连接\n")
-        self.server_status.set("已断开服务器连接")
+        self.server_log.insert(END, "已离开集群\n")
+        self.server_status.set("主服务器@0从机")
 
 
 def main():
