@@ -2,7 +2,7 @@
 Author: hanshan-macbookair 2625406970@qq.com
 Date: 2022-11-02 20:00:37
 LastEditors: hanshan-macbookair 2625406970@qq.com
-LastEditTime: 2022-11-02 20:34:14
+LastEditTime: 2022-11-03 22:20:15
 FilePath: /Python-Learn/test3.py
 Description: 
 
@@ -43,3 +43,14 @@ def main():
 
 
 main()
+
+"""在本节点查询文件
+
+    Args:
+        client_current_path (str): 客户端当前目录
+        query (str): 文件名
+
+    Returns:
+        int: 状态吗 OK:0 FAIL:-1
+        str:返回的数据或失败提示信息
+    """
